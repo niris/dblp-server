@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+function sanitize(a){return a.replace(/\s/g,'_').replace(/\W/g,'=')}
+function hash(name){
+	name_suf=name.match(/(.*?)( Jr\.| II| III| IV| V)?$/).slice(1);//extract name (and optionaly suffix)
+	var name=name_suf[0].match(/(^.*) (.*$)/).slice(1).reverse().map(sanitize);//split name into name/surname and sanitize
+	if(name_suf[1])name[0]+=sanitize(name_suf[1]);//append suffix to the surnam
+	return name[0][0].toLowerCase()+'/'+name.join(':');//return using the n/Name:Surname syntax
+}
+</script>
+
+<input onchange="out.value=hash(this.value)"/>
+<input id="out" disabled/>
+
+</body>
+</html>
