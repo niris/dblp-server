@@ -1,0 +1,214 @@
+﻿<html>
+<head>
+<style>
+textarea{width: 100% !important;height:10em;}
+h2>small{font-family:monospace;}
+</style>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+<script>
+var cold_nodes=["Behnam Dezfouli",
+"Douglas Fils",
+//"Graham Dean",
+"Hernani Pereira Costa",
+"Holger Dick",
+"Ivo Anast&aacute;cio",
+"Luca Ardito",//!!!!
+"Mehrdad Aliasgari",
+"Mohamed-Ikbel Boulabiar",
+"Muhammad Raisul Alam",
+"Muhammad Rizwan Asghar",
+"Sarah Fdili Alaoui",
+"Ioannis Deliyannis",
+"Marcelo G. Almiron",
+"Martino Bertoni",
+"Mattox Beckman",
+"Mehmet Burak Akgun",
+"Mohamed Almorsy",
+"Muhammad Sarmad Ali",
+"Panos Constantinides",
+
+"Romain Cledat",
+"S&eacute;bastien Dourlens",
+"Steven Bourke",
+"Vladimir Avram",
+"Wesam Dawoud",
+"Ben Cowley",
+//"Dimoklis Despotakis",
+"Elyes Lamine",
+"Ioannis Doudalis",
+"Aouatif Amine",
+"Azad Abad",
+"Fabio Buttussi",
+"Katrin Bergener",
+"Mamoun Alazab",
+"Maria-Iuliana Dascalu",
+"Tanja Buttler",
+"Teduh Dirgahayu",
+"Ahmet Dikici",
+"Andrew Dolgert",
+"Marcos B&aacute;ez",
+"Marilena Bandieramonte",
+"Mete Akg&uuml;n",
+"Stefan Axelsson",
+"Thomas Altenburger",
+"Aaron Curtis",
+"Barth&eacute;l&eacute;my Dagenais",
+"Christian Attiogb&eacute;",
+"Hande &Ouml;zg&uuml;r Alemdar",
+"Sajal Bhatia",
+"Vittoria Cozza",
+];
+
+</script>
+<script>
+var base='http://modelespace.univ-tlse2.fr/test.php'
+
+function getNeightboorByName(user_name,cb){
+	$.getJSON(base,{type:"name2user",val:user_name},function(users){
+		if(!users.length)return alert('no such user : '+user_name);
+		getNeightboorByUser(users[0],cb);
+	})
+}
+function getNeightboorById(user_id,cb){
+	$.getJSON(base,{type:"id_user2user",val:user_id},function(users){
+		if(!users.length)return alert('no such user : '+user_id);
+		getNeightboorByUser(users[0],cb);
+	})
+}
+function getNeightboorByUser(user,cb){
+	$.getJSON(base,{type:"id_user2id_pub",val:user.id},function(articles){
+		//cherche tout ses articles
+		var remain=0;//total number of collaborator (including duplicates)
+		var n={};//neightboor
+		articles.forEach(function(article){
+			$.getJSON(base,{type:"id_pub2id_user",val:article.id_pub},function(collabs){
+			//cherche les co-auteurs de tout ses articles
+				remain+=collabs.length;
+				collabs.forEach(function(collab){
+					var auteur=(n[collab.id_user]=n[collab.id_user]||{collabs:[],articles:null})
+					auteur.collabs.push(collab);
+					//recupére tout les articles de ce co-auteur
+					if(!auteur.articles){
+						auteur.articles=[];
+						$.getJSON(base,{type:"id_user2pub",val:collab.id_user},function(collabo_articles){
+							auteur.articles=(collabo_articles);
+							remain--;
+							if(!remain){
+								cb(n,user);
+							}
+						})
+					}else{
+						remain--;
+					}
+				});
+			})
+		})
+	})
+}
+function whoPublishedThis(all,query){
+	var list=[];
+	for(var aut in all)
+		for(var i=0;i<all[aut].articles.length;i++)//yay ! C style !
+			if(all[aut].articles[i].id==query)
+				list.push(aut);
+	return list;
+}
+function getWeightedRelation(all){
+	var rel={};
+	for(var a in all){
+		all[a].articles.forEach(function(art){
+			whoPublishedThis(all,art.id)/*.filter(function(b){return b!=a})*/.forEach(function(co){
+				if(a<=co)return;//evite les relation opposée + nombrilistes
+				if(!rel[a])rel[a]={};
+				if(!rel[a][co])rel[a][co]=0;
+				rel[a][co]++;
+			});
+		})
+	}
+	return rel;
+}
+
+///////////// GUI RELATED ////////////
+Array.prototype.toCSV=function(sep){return this.map(function(line){return line.join(sep)+'\n'}).join('').replace(/\n+/g,'\n');}
+
+function resetForm(){
+	table_nbau=table_amis=table_pub=table_ego="";
+	document.body.style.backgroundColor="";
+}
+
+function logToTextArea(json,user){
+	table_amis += $.map(json,function(colabo,colabo_id){if(user.id!=colabo_id)return [[user.id,colabo_id,colabo.collabs.length]]}).toCSV('\t');
+	table_pub  += $.map(json,function(user,user_id){return $.map(user.articles,function(pub){return [[user_id,pub.id,pub.name,pub.date]]})}).toCSV('\t');
+	table_ego  += $.map(user.rel,function(colab,colab_name){if(user.id!=colab_name)return $.map(colab,function(force,pote){if(user.id!=pote)return [[user.id,colab_name,pote,force]]})}).toCSV('\t');
+	table_nbau += [[user.name,Object.keys(json).length-1]].toCSV('\t');
+	start_user_loading.innerHTML='Done';
+}
+function loadUsers(users,i,k){
+	if(i>=users.length){
+		document.body.style.backgroundColor="#0F0";
+		return start_user_loading.innerHTML='Finished ! (total:'+users.length+')';
+	}
+	start_user_loading.innerHTML='Loading '+users[i];
+	getNeightboorByName(users[i],function(json,user){
+		//Json=json;
+		//User=user;
+		filename_sufix=user.name;
+		if(k==1){
+			user.rel=getWeightedRelation(json);
+			logToTextArea(json,user);
+			loadUsers(users,i+1,k);
+		}
+		if(k==2){
+			user.rel=getWeightedRelation(json);
+			var k1s = JSON.parse(JSON.stringify(json));//force a memcpy
+			var k2list = Object.keys(json);
+			var total=k2list.length;//var k1s={};
+			k2list.forEach(function(k1){
+				getNeightboorById(k1,function(k2s,k2_info){
+					json=$.extend(json,k2s);//bringK2toK1
+					if(!--total){//is everybody on the train ?
+						console.log(json,k1s);
+						user.rel=getWeightedRelation(json);
+						for(var u in json)json[u].collabs.length=k1s[u]?k1s[u].collabs.length:0;
+						logToTextArea(json,user);
+						loadUsers(users,i+1,k);
+					}
+				})
+			})
+			//logToTextArea(json,user);
+		}
+	});
+}
+function batch(nodes,k){
+	resetForm();
+	loadUsers(nodes,0,k);
+}
+var filename_sufix="";
+function var2href(e,str){
+	e.href        = "data:attachment/csv," + encodeURIComponent(str);
+	e.target      = '_blank';
+	e.download    = e.innerHTML+'_'+filename_sufix.replace(/\W/,'_')+'.csv';
+}
+</script>
+</head>
+<body onload="resetForm();">
+	<h2>Load all cold nodes :</h2>
+	<p><button onclick="batch(cold_nodes,1)">k=1</button></p>
+	<p><button onclick="batch(cold_nodes,2)">k=2</button></p>
+	<h2>Load 1 user :</h2>
+	<form onsubmit="batch([start_user.value],1);return false;">
+		<input id="start_user" required="required" placeholder="user name" value="Holger Dick">
+		<input type="submit" value="k=1">
+	</form>
+	<form onsubmit="batch([start_user.value],2);return false;">
+		<input id="start_user" required="required" placeholder="user name" value="Holger Dick">
+		<input type="submit" value="k=2">
+	</form>
+	<p id="start_user_loading"></p>
+	<h1>Results</h1>
+	<h2><a href="#" onclick="var2href(this,table_amis)">Amis</a> <a href="#" onclick="document.location = 'data:Application/octet-stream,' +encodeURIComponent(table_amis);">#</a><small>( k0_id, k1_id, nbCollab )</small></h2>
+	<h2><a href="#" onclick="var2href(this,table_pub )">Publi</a><a href="#" onclick="document.location = 'data:Application/octet-stream,' +encodeURIComponent(table_pub );">#</a><small>( k0_id, pub_id, pub_name, pub_date )</small></h2>
+	<h2><a href="#" onclick="var2href(this,table_ego )">Ego</a>  <a href="#" onclick="document.location = 'data:Application/octet-stream,' +encodeURIComponent(table_ego );">#</a><small>( k0_id, k1A_id,k1B_id,nbCollab_AB )</small></h2>
+	<h2><a href="#" onclick="var2href(this,table_nbau)">Nb_Au</a><a href="#" onclick="document.location = 'data:Application/octet-stream,' +encodeURIComponent(table_nbau);">#</a><small>( k0_id, count(k1) )</small></h2>
+</body>
+</html>
